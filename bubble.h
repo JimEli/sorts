@@ -6,3 +6,15 @@ void bubbleSort(T data[], const std::size_t n)
       if (data[j] < data[j - 1])
         swap(data[j], data[j - 1]);
 }
+
+/*************************************************************************
+ * Implements the bubble sort algorithm.
+ *************************************************************************/
+template <typename T>
+void bubbleSort(T* begin, T* end)
+{
+  for (T* i = begin; i < end; i++)
+    for (T* j = end - 1; j != i; --j)
+      if (*j < *(j - 1))
+        std::swap(*j, *(j - 1));
+}
