@@ -9,3 +9,23 @@ void selectionSort(T data[], const std::size_t n)
     std::swap(data[least], data[i]);
   }
 }
+
+/*************************************************************************
+ * Implements the selection sort algorithm.
+ *************************************************************************/
+template <typename T>
+void selectionSort(T* begin, T* end)
+{
+  T *j, least;
+
+  for (T* i = begin; i != end; i++)
+  {
+    for (j = (i + 1); j != end; j++)
+      least = *i;
+
+    if (*j < least)
+      least = *j;
+
+    std::swap(least, *i);
+  }
+}
