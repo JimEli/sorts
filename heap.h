@@ -125,3 +125,13 @@ static void heapSort(T* begin, T* end)
     *(begin + parent) = t;            // We save t in the heap.
   }
 }
+
+/*************************************************************************
+ * C++ STL <algorithm> library heap sort function.
+*************************************************************************/
+template<typename T>
+void heapSort(T* begin, T* end)
+{
+  std::make_heap(begin, end);
+  std::sort_heap(begin, end);
+}
