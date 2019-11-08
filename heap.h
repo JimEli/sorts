@@ -72,3 +72,56 @@ void myHeapSort(T* begin, T* end)
     moveDown(begin, 0, i - 1);
   }
 }
+
+/*************************************************************************
+ * Optimized (and efficient) heap sort function.
+ * Implementation taken from:
+ * http://en.wikibooks.org/wiki/Algorithm_implementation/Sorting/Heapsort
+*************************************************************************/
+template<typename T>
+static void heapSort(T* begin, T* end)
+{
+  unsigned int n = std::distance(begin, end);
+  unsigned int i = n / 2, parent, child;
+  int t;
+
+  // Loops until arr is sorted 
+  for (;;)
+  {
+    // First stage - Sorting the heap
+    if (i > 0)
+    {
+      i--;                          // Save its index to i.
+      t = *(begin + i);             // Save parent value to t.
+    }
+    else
+    {                                 // Second stage - Extracting elements in-place.
+      n--;                          // Make the new heap smaller.
+      if (n == 0)
+        return;                   // When the heap is empty, we are done.
+      t = *(begin + n);             // Save last value (it will be overwritten).
+      *(begin + n) = *begin;        // Save largest value at the end of arr.
+    }
+    parent = i;                       // We will start pushing down t from parent.
+    child = i*2 + 1;                  // Parent's left child.
+
+    // Sift operation - pushing the value of t down the heap.
+    while (child < n)
+    {
+      if (child + 1 < n  &&  *(begin + child + 1) > *(begin + child))
+        child++;                  // Choose the largest child.
+
+      // If any child is bigger than the parent 
+      if (*(begin + child) > t)
+      {
+        // Move the largest child up. 
+        *(begin + parent) = *(begin + child);
+        parent = child;           // Move parent pointer to this child.
+        child = parent*2 + 1;     // Find the next child.
+      }
+      else
+        break;                    // t's place is found.
+    }
+    *(begin + parent) = t;            // We save t in the heap.
+  }
+}
