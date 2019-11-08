@@ -28,3 +28,23 @@ void countingSort(long data[], const long n)
   for (i = 0; i < n; i++)        // transfer numbers from tmp[]
     data[i] = tmp[i];          // to the original array;
 }
+
+/*************************************************************************
+ * Implements a counting sort algorithm.
+ *************************************************************************/
+template<typename T>
+void countingSort(T* begin, T* end)
+{
+  T min = *std::min_element(begin, end);
+  T max = *std::max_element(begin, end);
+  std::vector<unsigned> count((max - min) + 1, 0);
+
+  for (T* i = begin; i != end; ++i)
+    ++count[*i - min];
+
+  T* start = begin;
+
+  for (T i = min; i <= max; ++i)
+    for (unsigned j = 0; j < count[i - min]; ++j)
+      *start++ = i;
+}
