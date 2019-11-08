@@ -38,3 +38,18 @@ void mergeSort(T data[], const int n)
   T *temp = new T[n];
   mergeSort(data, temp, 0, n - 1);
 }
+
+/*************************************************************************
+ * Implements merge sort algorithm using STL comparison function std::less.
+ *************************************************************************/
+template <typename T>
+void mergeSort(T* begin, T* end)
+{
+  if (end - begin > 1)
+  {
+    T* mid = begin + (end - begin) / 2;
+    mergeSort(begin, mid);
+    mergeSort(mid, end);
+    std::inplace_merge(begin, mid, end, std::less<T>());
+  }
+}
