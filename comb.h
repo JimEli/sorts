@@ -47,3 +47,31 @@ void combSort(T data[], const int n)
         again = true;
       }
 }
+
+/*************************************************************************
+ * Implements a comb sort algorithm.
+ *************************************************************************/
+template <typename T>
+void combSort(T* begin, T* end)
+{
+  T *current, *next;
+  T length = std::distance(begin, end), space = length;
+
+  for (bool swapped = false; (space > 1) || swapped;)
+  {
+    space = ((space * 10) + 3) / 13;
+
+    if ((space == 9) || (space == 10))
+      space = 11;
+
+    current = next = begin;
+    next += space;
+
+    for (swapped = false; next != end; current++, next++)
+      if (*next < *current)
+      {
+        std::swap(*current, *next);
+        swapped = true;
+      }
+  }
+}
