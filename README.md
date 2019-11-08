@@ -1,7 +1,8 @@
 # Sorts
 ### Collection of sorting functions.
 
-```template <typename T> 
+```
+template <typename T> 
 void stlSort(T*, T*);       // STL sort algorithm.
 ```
 ```
@@ -16,35 +17,46 @@ void stlQSort(T*, T*);      // STL quicksort algorithm.
 template <typename T> 
 void stableSort(T*, T*);    // STL stable sort algoritm).
 ```
+```
 template <typename T> 
 void insertionSort(T*, T*); // My insertion sort.
-
+```
+```
 template <typename T> 
 void selectionSort(T*, T*); // My selection sort algorithm.
-
+```
+```
 template <typename T> 
 void bubbleSort(T*, T*);
-
+```
+```
 template <typename T> 
 void shakerSort(T*, T*);
-
+```
+```
 template <typename T> 
 void combSort(T*, T*);      // My comb sort algorithm.
-
+```
+```
 template <typename T> 
 void myHeapSort(T*, T*);    // My heap sort algorithm.
-
+```
+```
 template <typename T> 
 void mergeSort(T*, T*);     // My merge sort algorithm.
-
+```
+```
 template <typename T> 
 void quickSort(T*, T*);     // My quicksort algorithm.
-
+```
+```
 template <typename T> 
 void countingSort(T*, T*);  // My counting sort algorithm.
-
+```
+```
 template <typename T> 
 void radixSort(T*, T*);     // My radix sort algorithm.
+```
 
 ### Notes:
 * (1) Insertion, selection, comb, counting, myHeap, merge and quicksort adapted from the textbook "Data Structures and Algorithms in C++", 4th edition, by Drozdek.
