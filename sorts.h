@@ -1,6 +1,6 @@
 /*************************************************************************
-* Title: Benchmark Sort Functions.
-* File: sort_funcs.h
+* Title: Sort Functions.
+* File: sorts.h
 * Author: James Eli
 * Date: 11/16/2018
 *
@@ -12,15 +12,18 @@
 *      4th edition, by Drozdek.
 *  (2) Radix sort inspiration from studying the Electronic Arts Standard
 *      Template Library (EASTL) source code.
-*  (3) Compiled/tested with MS Visual Studio 2017 Community (v141), and
+*  (3) Uses C++17 parallel algorithm feature for sort(), otherwise
+*      substitutes a concurrent MSVC++ Parallel Patterns Library version.
+*  (4) Compiled/tested with MS Visual Studio 2017 Community (v141), and
 *      Windows SDK version 10.0.17134.0
-*  (4) Compiled/tested with Eclipse Oxygen.3a Release (4.7.3a), using
+*  (5) Compiled/tested with Eclipse Oxygen.3a Release (4.7.3a), using
 *      CDT 9.4.3 and MinGw gcc-g++ (6.3.0-1).
-*
 *************************************************************************
 * Change Log:
+*   11/29/2018: Add C++17 parallel algorithm sort. JME
 *   11/16/2018: Initial release. JME
 *************************************************************************/
+
 #ifndef _SORT_FUNCTIONS_H_
 #define _SORT_FUNCTIONS_H_
 
@@ -29,6 +32,8 @@
 #include <cstring>   // memset
 #include <vector>    // used by counting sort
 #include <exception> // runtime exception
+
+using namespace concurrency;
 
 /*
 // Integral sort function prototypes.
@@ -45,8 +50,25 @@ template <typename T> void myHeapSort(T*, T*);    // My heap sort algorithm.
 template <typename T> void mergeSort(T*, T*);     // My merge sort algorithm.
 template <typename T> void quickSort(T*, T*);     // My quicksort algorithm.
 template <typename T> void countingSort(T*, T*);  // My counting sort algorithm.
-template <typename T> void radixSort(T*, T*);     // My radix sort algorithm.
+template <typename T> void stlHeapSort(T*, T*);   // STL heap sort algorithm.
+template <typename T> void qSort(T*, T*);         // C library qsort algorithm.
+template <typename T> void radixSort(T*, T*);     // My optimized radix sort (based on EASTL) algorith.
+template <typename T> void pSort(T*, T*);         // PPL or STL C++17 parallel sort algorithm.
+#if (_MSC_VER && __cpp_lib_parallel_algorithm < 201603)
+inline float LogN(float);                         // Parallel quicksort helper function.
+template <typename T> void pRadix(T*, T*);        // PPL parallel radix sort.
+#endif
+template <typename T> void aRadix(T*, T*);      // C++ AMP parallel radix sort.
 */
+
+/*************************************************************************
+ * C <cstdlib> library qsort function.
+*************************************************************************/
+template <typename T>
+T cmp(const void *a, const void *b) { return (*(T*)a - *(T*)b); }
+
+template <typename T>
+void qSort(T* begin, T* end) { qsort(begin, std::distance(begin, end), sizeof(T), cmp); }
 
 /*************************************************************************
  * C++ STL <algorithm> library sort function. sort() uses an introsort
@@ -660,6 +682,442 @@ void pSort(T* begin, T* end)
 
   // Step 6: Copy the temporary container for the sorted array into the input array.    
   std::memcpy(begin, &sorted[0], sz * sizeof(T));
+}
+
+/*************************************************************************
+ * Optimized (and efficient) heap sort function.
+ * Implementation taken from:
+ * http://en.wikibooks.org/wiki/Algorithm_implementation/Sorting/Heapsort
+*************************************************************************/
+template<typename T>
+static void heapSort(T* begin, T* end)
+{
+  unsigned int n = std::distance(begin, end);
+  unsigned int i = n / 2, parent, child;
+  int t;
+
+  // Loops until arr is sorted 
+  for (;;)
+  {
+    // First stage - Sorting the heap
+    if (i > 0)
+    {
+      i--;                          // Save its index to i.
+      t = *(begin + i);             // Save parent value to t.
+    }
+    else
+    {                                 // Second stage - Extracting elements in-place.
+      n--;                          // Make the new heap smaller.
+      if (n == 0)
+        return;                   // When the heap is empty, we are done.
+      t = *(begin + n);             // Save last value (it will be overwritten).
+      *(begin + n) = *begin;        // Save largest value at the end of arr.
+    }
+    parent = i;                       // We will start pushing down t from parent.
+    child = i*2 + 1;                  // Parent's left child.
+
+    // Sift operation - pushing the value of t down the heap.
+    while (child < n)
+    {
+      if (child + 1 < n  &&  *(begin + child + 1) > *(begin + child))
+        child++;                  // Choose the largest child.
+
+      // If any child is bigger than the parent 
+      if (*(begin + child) > t)
+      {
+        // Move the largest child up. 
+        *(begin + parent) = *(begin + child);
+        parent = child;           // Move parent pointer to this child.
+        child = parent*2 + 1;     // Find the next child.
+      }
+      else
+        break;                    // t's place is found.
+    }
+    *(begin + parent) = t;            // We save t in the heap.
+  }
+}
+
+#if (_MSC_VER && __cpp_lib_parallel_algorithm < 201603)
+/*************************************************************************
+ Concurrent MSVC++ Parallel Patterns Library radix sort.
+ *************************************************************************/
+template <typename T>
+void pRadix(T* begin, T* end) { Concurrency::parallel_radixsort(begin, end); }
+
+/*************************************************************************
+ * Implements a concurrent MSVC++ Parallel Patterns Library quicksort.
+ *************************************************************************/
+template <typename T>
+void ParallelQuickSortWithSTL(T* begin, T* end, int depthRemaining, long threshold)
+{
+  if (std::distance(begin, end) <= threshold)
+    std::sort(begin, end);
+
+  else
+  {
+    T* pivot = std::partition(begin, end, std::bind2nd(std::less<T>(), *begin));
+
+    if (depthRemaining > 0)
+    {
+      Concurrency::parallel_invoke(
+        [begin, end, pivot, depthRemaining, threshold] {
+        if (pivot != end)
+          ParallelQuickSortWithSTL(begin, pivot, depthRemaining - 1, threshold);
+      },
+        [&pivot, begin, end, depthRemaining, threshold] {
+        if (pivot == begin)
+          ++pivot;
+        ParallelQuickSortWithSTL(pivot, end, depthRemaining - 1, threshold);
+      });
+    }
+
+    else
+    {
+      T* pivot = std::partition(begin, end, std::bind2nd(std::less<T>(), *begin));
+
+      if (pivot != end)
+        std::sort(begin, pivot);
+
+      if (pivot == begin)
+        ++pivot;
+
+      std::sort(pivot, end);
+    }
+  }
+}
+/*
+template <typename T>
+void SequentialQuickSort(T* begin, T* end, long threshold)
+{
+  if (std::distance(begin, end) <= threshold)
+    insertionSort(begin, end);
+
+  else
+  {
+    T* pivot = std::partition(begin + 1, end, std::bind2nd(std::less<int>(), *begin));
+
+    //std::iter_swap(begin, pivot - 1);
+    std::swap(*begin, *(pivot - 1));
+
+    SequentialQuickSort(begin, pivot - 1, threshold);
+    SequentialQuickSort(pivot, end, threshold);
+  }
+}
+
+template <typename T>
+void ParallelQuickSort(T* begin, T* end, long threshold, int depthRemaining)
+{
+  if (std::distance(begin, end) <= threshold)
+    insertionSort(begin, end);
+
+  else
+  {
+    T* pivot = std::partition(begin + 1, end, std::bind2nd(std::less<int>(), *begin));
+
+    std::swap(*begin, *(pivot - 1));
+
+    if (depthRemaining > 0)
+    {
+      Concurrency::parallel_invoke([begin, end, pivot, depthRemaining, threshold]
+      {
+        ParallelQuickSort(begin, pivot - 1, depthRemaining - 1, threshold);
+      },
+        [&pivot, begin, end, depthRemaining, threshold] {
+        ParallelQuickSort(pivot, end, depthRemaining - 1, threshold);
+      });
+    }
+
+    else
+    {
+      SequentialQuickSort(begin, pivot - 1, threshold);
+      SequentialQuickSort(pivot, end, threshold);
+    }
+  }
+}
+*/
+
+template <typename T>
+void pSort(T* begin, T* end)
+{
+  const int maxTasks = Concurrency::CurrentScheduler::Get()->GetNumberOfVirtualProcessors();
+  //ParallelQuickSort(begin, end, (int)LogN(float(maxTasks), 2.0f) + 4, 256);
+  ParallelQuickSortWithSTL(begin, end, (int)LogN((float)maxTasks) + 4, 256);
+}
+
+// To generate logarithms for base 2. Log base b of a == natural log (a) / natural log (b).
+inline float LogN(float value) { return logf(value) / logf(2.0f); }
+#endif
+
+#if (__cpp_lib_parallel_algorithm >= 201603)
+/*************************************************************************
+ * C++ STL <algorithm> library sort function with C++17 parallel option.
+ * Defaults to sequential version if C++17 features not available.
+ *************************************************************************/
+template <typename T>
+// Use parallel algorithm.
+void pSort(T* begin, T* end) { std::sort(std::execution::par_unseq, begin, end); }
+#endif
+
+/*************************************************************************
+ * Implements a radix sort algorithm.
+*************************************************************************/
+// Implements a classic LSD (least significant digit) radix sort.
+// See http://en.wikipedia.org/wiki/Radix_sort.
+// To consider: A static linked-list implementation may be faster than the version here.
+// The radix_sort implementation uses two optimizations that are not part of a typical radix sort implementation.
+// 1. Computing a histogram (i.e. finding the number of elements per bucket) for the next pass is done in parallel with the loop that "scatters"
+//    elements in the current pass.  The advantage is that it avoids the memory traffic / cache pressure of reading keys in a separate operation.
+//    Note: It would also be possible to compute all histograms in a single pass.  However, that would increase the amount of stack space used and
+//    also increase cache pressure slightly.  However, it could still be faster under some situations.
+// 2. If all elements are mapped to a single bucket, then there is no need to perform a scatter operation.  Instead the elements are left in place
+//    and only copied if they need to be copied to the final output buffer.
+template <typename T>
+void radixSort(T* begin, T* end)
+{
+  T* temp, *first = begin;
+  T* buffer = new T[std::distance(begin, end)], *pBuffer = buffer;
+  constexpr int DIGIT_BITS = 8;                   // Bits per digit.
+  constexpr size_t NUM_BUCKETS = 1 << DIGIT_BITS; // Number of buckets.
+  constexpr T BUCKET_MASK = NUM_BUCKETS - 1;      // Mask all bits.
+  uint32_t bucketSize[NUM_BUCKETS];
+  uint32_t bucketPos[NUM_BUCKETS];
+  bool doSeparateHistogramCalculation = true;
+
+  for (uint32_t j = 0; j < (8 * sizeof(T)); j += DIGIT_BITS)
+  {
+    if (doSeparateHistogramCalculation)
+    {
+      memset(bucketSize, 0, sizeof(bucketSize));
+      // Calculate histogram for the first scatter operation
+      for (temp = first; temp != end; ++temp)
+        ++bucketSize[(*temp >> j) & BUCKET_MASK];
+    }
+
+    // If a single bucket contains all of the elements, then don't 
+    // bother redistributing all elements to the same bucket.
+    if (bucketSize[((*first >> j) & BUCKET_MASK)] == uint32_t(end - first))
+    {
+      // Set flag to ensure histogram is computed for next digit position.
+      doSeparateHistogramCalculation = true;
+    }
+    else
+    {
+      // The histogram is either not needed or it will be calculated in parallel 
+      // with the scatter operation below for better cache efficiency.
+      doSeparateHistogramCalculation = false;
+
+      // If this is the last digit position, then don't calculate a histogram
+      if (j == (8 * sizeof(T) - DIGIT_BITS))
+      {
+        bucketPos[0] = 0;
+
+        for (uint32_t i = 0; i < NUM_BUCKETS - 1; i++)
+          bucketPos[i + 1] = bucketPos[i] + bucketSize[i];
+
+        for (temp = first; temp != end; ++temp)
+        {
+          const size_t digit = (*temp >> j) & BUCKET_MASK;
+          *(pBuffer + bucketPos[digit]++) = *temp;
+        }
+      }
+      else
+      {
+        bucketPos[0] = 0;
+
+        for (uint32_t i = 0; i < NUM_BUCKETS - 1; i++)
+        {
+          bucketPos[i + 1] = bucketPos[i] + bucketSize[i];
+          bucketSize[i] = 0;
+        }
+
+        uint32_t next = j + DIGIT_BITS;
+
+        for (temp = first; temp != end; ++temp)
+        {
+          const size_t digit = (*temp >> j) & BUCKET_MASK;
+          *(pBuffer + bucketPos[digit]++) = *temp;
+          ++bucketSize[(*temp >> next) & BUCKET_MASK];
+        }
+      }
+
+      end = pBuffer + (end - first);
+      temp = first;
+      first = pBuffer;
+      pBuffer = temp;
+    }
+  }
+
+  // Copy buffer to original array.
+  if (first != begin)
+    for (temp = first; temp != end; ++temp)
+      *pBuffer++ = *temp;
+
+  delete[] buffer;
+}
+#endif
+
+/*************************************************************************
+ * C++ AMP radix sort function. If not available, defaults to std::sort.
+*************************************************************************/
+void arr_fill(concurrency::array_view<unsigned>& dest, concurrency::array_view<unsigned>& src, unsigned val)
+{
+  parallel_for_each(dest.extent, [dest, val, src](concurrency::index<1> idx) restrict(amp)
+  {
+    dest[idx] = ((unsigned)idx[0] < src.get_extent().size()) ? src[idx] : val;
+  });
+}
+
+unsigned get_bits(unsigned x, unsigned numbits, unsigned bitoffset) restrict(amp) { return (x >> bitoffset) & ~(~0 << numbits); }
+unsigned pow2(unsigned x) restrict(amp, cpu) { return (((unsigned)1) << x); }
+
+unsigned tile_sum(unsigned x, concurrency::tiled_index<256> tidx) restrict(amp)
+{
+  unsigned l_id = tidx.local[0];
+  tile_static unsigned l_sums[256][2];
+
+  l_sums[l_id][0] = x;
+  tidx.barrier.wait();
+
+  for (unsigned i = 0; i < 8; i++)
+  {
+    if (l_id < pow2(7 - i))
+    {
+      unsigned w = (i + 1) % 2;
+      unsigned r = i % 2;
+
+      l_sums[l_id][w] = l_sums[l_id * 2][r] + l_sums[l_id * 2 + 1][r];
+    }
+    tidx.barrier.wait();
+  }
+  return l_sums[0][0];
+
+}
+
+unsigned tile_prefix_sum(unsigned x, concurrency::tiled_index<256> tidx, unsigned& last_val) restrict(amp)
+{
+  unsigned l_id = tidx.local[0];
+  tile_static unsigned l_prefix_sums[256][2];
+
+  l_prefix_sums[l_id][0] = x;
+  tidx.barrier.wait();
+
+  for (unsigned i = 0; i < 8; i++)
+  {
+    unsigned pow2i = pow2(i);
+
+    unsigned w = (i + 1) % 2;
+    unsigned r = i % 2;
+
+    l_prefix_sums[l_id][w] = (l_id >= pow2i) ? (l_prefix_sums[l_id][r] + l_prefix_sums[l_id - pow2i][r]) : l_prefix_sums[l_id][r];
+
+    tidx.barrier.wait();
+  }
+  last_val = l_prefix_sums[255][0];
+
+  unsigned retval = (l_id == 0) ? 0 : l_prefix_sums[l_id - 1][0];
+  return retval;
+}
+
+unsigned tile_prefix_sum(unsigned x, concurrency::tiled_index<256> tidx) restrict(amp)
+{
+  unsigned ll = 0;
+  return tile_prefix_sum(x, tidx, ll);
+}
+
+void calc_interm_sums(unsigned bitoffset, concurrency::array<unsigned>& interm_arr, concurrency::array<unsigned>& interm_sums, concurrency::array<unsigned>& interm_prefix_sums, unsigned num_tiles)
+{
+  auto ext = extent<1>(num_tiles * 256).tile<256>();
+
+  parallel_for_each(ext, [=, &interm_sums, &interm_arr](tiled_index<256> tidx) restrict(amp)
+  {
+    unsigned inbound = ((unsigned)tidx.global[0] < interm_arr.get_extent().size());
+    unsigned num = (inbound) ? get_bits(interm_arr[tidx.global[0]], 2, bitoffset) : get_bits(0xffffffff, 2, bitoffset);
+
+    for (unsigned i = 0; i < 4; i++)
+    {
+      unsigned to_sum = (num == i);
+      unsigned sum = tile_sum(to_sum, tidx);
+
+      if (tidx.local[0] == 0)
+        interm_sums[i*num_tiles + tidx.tile[0]] = sum;
+    }
+  });
+
+  unsigned numiter = (num_tiles / 64) + ((num_tiles % 64 == 0) ? 0 : 1);
+  ext = extent<1>(256).tile<256>();
+
+  parallel_for_each(ext, [=, &interm_prefix_sums, &interm_sums](tiled_index<256> tidx) restrict(amp)
+  {
+    unsigned last_val0 = 0;
+    unsigned last_val1 = 0;
+
+    for (unsigned i = 0; i < numiter; i++)
+    {
+      unsigned g_id = tidx.local[0] + i * 256;
+      unsigned num = (g_id < (num_tiles * 4)) ? interm_sums[g_id] : 0;
+      unsigned scan = tile_prefix_sum(num, tidx, last_val0);
+      if (g_id < (num_tiles * 4)) interm_prefix_sums[g_id] = scan + last_val1;
+
+      last_val1 += last_val0;
+    }
+  });
+}
+
+void sort_step(unsigned bitoffset, concurrency::array<unsigned>& src, concurrency::array<unsigned>& dest, concurrency::array<unsigned>& interm_prefix_sums, unsigned num_tiles)
+{
+  auto ext = extent<1>(num_tiles * 256).tile<256>();
+
+  parallel_for_each(ext, [=, &interm_prefix_sums, &src, &dest](tiled_index<256> tidx) restrict(amp)
+  {
+    unsigned inbounds = ((unsigned)tidx.global[0] < src.get_extent().size());
+    unsigned element = (inbounds) ? src[tidx.global[0]] : 0xffffffff;
+    unsigned num = get_bits(element, 2, bitoffset);
+    for (unsigned i = 0; i < 4; i++)
+    {
+      unsigned scan = tile_prefix_sum((num == i), tidx) + interm_prefix_sums[i*num_tiles + tidx.tile[0]];
+      if (num == i && inbounds) dest[scan] = element;
+    }
+  });
+}
+
+void amp_radix_sort(concurrency::array<unsigned>& arr)
+{
+  unsigned size = arr.get_extent().size();
+  const unsigned num_tiles = (size / 256) + ((size % 256 == 0) ? 0 : 1);
+  array<unsigned> interm_arr(size);
+  array<unsigned> interm_sums(num_tiles * 4);
+  array<unsigned> interm_prefix_sums(num_tiles * 4);
+
+  for (unsigned i = 0; i < 16; i++)
+  {
+    array<unsigned>& src = (i % 2 == 0) ? arr : interm_arr;
+    array<unsigned>& dest = (i % 2 == 0) ? interm_arr : arr;
+    unsigned bitoffset = i * 2;
+
+    calc_interm_sums(bitoffset, src, interm_sums, interm_prefix_sums, num_tiles);
+    sort_step(bitoffset, src, dest, interm_prefix_sums, num_tiles);
+  }
+}
+
+template <typename T>
+void aRadix(T* begin, T* end)
+{
+  accelerator default_device;
+  if (default_device == accelerator(accelerator::direct3d_ref))
+  {
+    std::sort(begin, end);
+    return;
+  }
+  {
+    unsigned size = std::distance(begin, end);
+    array<unsigned, 1> av(size, begin);
+
+    amp_radix_sort(av);
+    av.accelerator_view.wait();
+    // Synchronise.
+    copy(av, begin);
+    av.accelerator_view.wait();
+  }
 }
 
 #endif
