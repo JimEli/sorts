@@ -3,7 +3,8 @@ const int radix = 10;
 const int digits = 10;
 
 template<class T>
-void radixSort(T data[], const int n) {
+void radixSort(T data[], const int n) 
+{
   register int d, j, k, factor;
   Queue<T> queues[radix];
 
